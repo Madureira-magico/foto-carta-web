@@ -15,10 +15,14 @@
   --sab: env(safe-area-inset-bottom, 0px);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:#000;overflow:hidden;overscroll-behavior:none}
-body{position:fixed;inset:0;font-family:-apple-system,"SF Pro Text","SF Pro Display",system-ui,"Helvetica Neue",Arial,sans-serif;
+html{height:100%;background:#000;overflow:hidden;overscroll-behavior:none}
+/* iOS 26 (WebKit 301108): documento precisa ser da altura da tela para ganhar a tela inteira */
+@media (display-mode: standalone){html{min-height:min(100lvh,calc(100% + env(safe-area-inset-top,0px)))}body{min-height:calc(100vh + env(safe-area-inset-top,0px))}}
+html.sa{min-height:min(100lvh,calc(100% + env(safe-area-inset-top,0px)))}
+html.sa body{min-height:calc(100vh + env(safe-area-inset-top,0px))}
+body{position:relative;height:var(--appH,100%);overflow:hidden;overscroll-behavior:none;font-family:-apple-system,"SF Pro Text","SF Pro Display",system-ui,"Helvetica Neue",Arial,sans-serif;
   color:#fff;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;-webkit-font-smoothing:antialiased}
-.screen{position:absolute;inset:0;display:none;overflow:hidden}
+.screen{position:fixed;top:0;left:0;width:100%;height:var(--appH,100%);display:none;overflow:hidden}
 .screen.on{display:block}
 .wall{position:absolute;inset:0;background-size:cover;background-position:center}
 .wall.def{background:
@@ -265,6 +269,7 @@ input[type=file]{display:none}
       <div class="note" style="margin-top:0">• Na tela bloqueada, arraste dois dedos juntos (em qualquer direção): abre estes ajustes.<br>• Toque 3 vezes rápido no topo da tela (em qualquer tela depois de desbloquear): volta para a tela bloqueada e zera tudo.<br>• No Fotos, deslize para cima a partir da barra de abas: volta para a Tela de Início.<br>• Na foto, toque na imagem para esconder os botões.</div>
     </div>
     <div id="sMsg" class="note" style="color:#ff3b30"></div>
+    <div class="note" id="sVer" style="text-align:center;margin-top:20px"></div>
   </div>
 </div>
 
@@ -279,7 +284,18 @@ input[type=file]{display:none}
 const $=s=>document.querySelector(s);
 const $$=s=>Array.from(document.querySelectorAll(s));
 const isStandalone = window.navigator.standalone===true || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
-if(isStandalone) document.body.classList.add('standalone');
+if(isStandalone){document.body.classList.add('standalone');document.documentElement.classList.add('sa');}
+/* iOS standalone: full-height fix + keep page from shifting (touch offset bug) */
+function fit(){const portrait=innerHeight>=innerWidth;
+  let h=innerHeight;if(isStandalone&&portrait)h=Math.max(innerHeight,screen.height);
+  document.documentElement.style.setProperty('--appH',h+'px');
+  if(window.scrollX||window.scrollY)window.scrollTo(0,0);}
+fit();
+['resize','orientationchange','pageshow','focus'].forEach(ev=>addEventListener(ev,()=>{fit();setTimeout(fit,300);}));
+addEventListener('scroll',()=>{if(window.scrollY||window.scrollX)window.scrollTo(0,0);},{passive:true});
+if(window.visualViewport){visualViewport.addEventListener('resize',fit);visualViewport.addEventListener('scroll',()=>window.scrollTo(0,0));}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){fit();setTimeout(fit,300);}});
+document.addEventListener('touchmove',e=>{if(!e.target.closest('.ph-scroll,#settings .scroll'))e.preventDefault();},{passive:false});
 
 /* ---------- storage ---------- */
 const mem={};
@@ -527,7 +543,7 @@ function makePlaceholders(n){const P=[['#87b5e6','#e9d7b8','#6c8c5a'],['#f6a25a'
 
 /* ---------- settings ---------- */
 function openSettings(){fillSettings();show('settings');anim($('#settings'),[{transform:'translateY(100%)'},{transform:'translateY(0)'}],320);}
-function fillSettings(){$('#sLen').value=String(cfg.len);$('#sHint').value=String(cfg.hint);$('#sBg').value=cfg.bg;$('#sWhen').value=cfg.when;
+function fillSettings(){$('#sVer').textContent='Versão 5 · tela '+screen.height+' · área '+innerHeight+(isStandalone?' · app':' · navegador');$('#sLen').value=String(cfg.len);$('#sHint').value=String(cfg.hint);$('#sBg').value=cfg.bg;$('#sWhen').value=cfg.when;
   $$('.sSuit').forEach(s=>{s.innerHTML=Object.keys(SUITS).map(k=>'<option value="'+k+'">'+SUITS[k].n+'</option>').join('');s.value=cfg.suits[+s.dataset.i];});
   $('#galCount').textContent=gallery.length?gallery.length+' fotos':'nenhuma';
   const i=cfg.suits.indexOf('H');$('#sEx').textContent=(i+1)+'13'+(cfg.len===6?'580':'7')+' = Rei de Copas';
