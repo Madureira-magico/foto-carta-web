@@ -133,6 +133,7 @@ body{position:relative;height:var(--appH,100%);overflow:hidden;overscroll-behavi
 #calib img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.85}
 #calib .msg{position:absolute;top:45%;left:20px;right:20px;text-align:center;background:rgba(0,0,0,.75);padding:14px;border-radius:14px;font-size:16px;font-weight:600;pointer-events:none}
 input[type=file]{display:none}
+img{-webkit-touch-callout:none;-webkit-user-drag:none}
 </style>
 </head>
 <body>
@@ -268,7 +269,7 @@ input[type=file]{display:none}
 
     <div class="sec">
       <span class="sec-t">Gestos secretos</span>
-      <div class="note" style="margin-top:0">• Na tela bloqueada, arraste dois dedos juntos (em qualquer direção): abre estes ajustes.<br>• Toque 3 vezes rápido no topo da tela (em qualquer tela depois de desbloquear): volta para a tela bloqueada e zera tudo.<br>• No Fotos, deslize para cima a partir da barra de abas: volta para a Tela de Início.<br>• Na foto, toque na imagem para esconder os botões.</div>
+      <div class="note" style="margin-top:0">• Na tela bloqueada, arraste dois dedos juntos (em qualquer direção): abre estes ajustes.<br>• Depois de desbloquear, na Tela de Início, segure o dedo parado em qualquer lugar por 1,5 s (menos no ícone Fotos): volta para a tela bloqueada e zera tudo.<br>• No Fotos, deslize para cima a partir da barra de abas: volta para a Tela de Início.<br>• Na foto, toque na imagem para esconder os botões.</div>
     </div>
     <div id="sMsg" class="note" style="color:#ff3b30"></div>
     <div class="note" id="sVer" style="text-align:center;margin-top:20px"></div>
@@ -422,7 +423,7 @@ function icon(a){const d=document.createElement('div');d.className='ic';d.style.
   else if(a[3]==='photos'){d.style.background='url('+PHOTO_ICON+') center/cover';}
   else d.innerHTML='<svg viewBox="0 0 24 24">'+a[3]+'</svg>';
   return d;}
-APPS.forEach(a=>{const el=document.createElement('div');el.className='app';el.appendChild(icon(a));const s=document.createElement('span');s.textContent=a[0];el.appendChild(s);
+APPS.forEach(a=>{const el=document.createElement('div');el.className='app'+(a[3]==='photos'?' nohold':'');el.appendChild(icon(a));const s=document.createElement('span');s.textContent=a[0];el.appendChild(s);
   el.addEventListener('click',()=>{if(a[3]==='photos'){openPhotos(el.querySelector('.ic').getBoundingClientRect());}else{el.classList.remove('bounce');void el.offsetWidth;el.classList.add('bounce');}});
   $('#apps').appendChild(el);});
 DOCK.forEach(a=>{const el=document.createElement('div');el.className='app';el.appendChild(icon(a));el.addEventListener('click',()=>{el.classList.remove('bounce');void el.offsetWidth;el.classList.add('bounce');});$('#dock').appendChild(el);});
@@ -441,7 +442,7 @@ function buildGrid(){
   const g=$('#phGrid');g.innerHTML='';
   let list=gallery.length?gallery.slice():(placeholders||(placeholders=makePlaceholders(26)));
   list.forEach(u=>{const d=document.createElement('div');d.className='ph';d.style.backgroundImage='url('+u+')';d.addEventListener('click',()=>openViewer(u,null));g.appendChild(d);});
-  const c=document.createElement('div');c.className='ph';c.style.backgroundImage='url('+cardURL+')';c.addEventListener('click',()=>openViewer(cardURL,cardTime));g.appendChild(c);
+  const c=document.createElement('div');c.className='ph nohold';c.style.backgroundImage='url('+cardURL+')';c.addEventListener('click',()=>openViewer(cardURL,cardTime));g.appendChild(c);
   const n=list.length+1;$('#phCount').textContent=n.toLocaleString('pt-BR')+' Itens';
 }
 function openPhotos(r){show('photos');const sc=$('#phScroll');sc.scrollTop=sc.scrollHeight;
@@ -474,11 +475,20 @@ function photoTime(w){const n=new Date();const r=(a,b)=>a+Math.floor(Math.random
   if(w==='week'){const d=new Date(n);d.setDate(d.getDate()-5);d.setHours(r(14,22),r(0,59));return d;}
   return new Date(n.getTime()-r(0,2)*60000);}
 
-/* ---------- triple tap top = reset ---------- */
-let taps=[];
-document.addEventListener('pointerdown',e=>{if($('#lock').classList.contains('on')||$('#settings').classList.contains('on')||$('#calib').classList.contains('on'))return;
-  const topZone=(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--satpx'))||0)+60;
-  if(e.clientY<topZone){const t=Date.now();taps=taps.filter(x=>t-x<700);taps.push(t);if(taps.length>=3){taps=[];goLock();}}},true);
+/* ---------- segurar o dedo 1,5 s em qualquer lugar = volta para a tela bloqueada ---------- */
+let hold=null,holdXY=null,eatClick=false;
+function cancelHold(){clearTimeout(hold);hold=null;}
+document.addEventListener('pointerdown',e=>{cancelHold();
+  /* só na Tela de Início (com Fotos/foto fechados) */
+  if(!$('#home').classList.contains('on')||$('#photos').classList.contains('on')||$('#viewer').classList.contains('on')||$('#settings').classList.contains('on')||$('#calib').classList.contains('on'))return;
+  if(!e.isPrimary||e.target.closest('.nohold'))return;
+  if($('#home').classList.contains('on')&&homeShot&&cfg.fpos&&e.target.id==='homeShot'&&Math.hypot(e.clientX-cfg.fpos.x*innerWidth,e.clientY-cfg.fpos.y*innerHeight)<innerWidth*0.1)return;
+  holdXY=[e.clientX,e.clientY];
+  hold=setTimeout(()=>{hold=null;eatClick=true;setTimeout(()=>eatClick=false,600);goLock();},1500);},true);
+document.addEventListener('pointermove',e=>{if(hold&&holdXY&&Math.hypot(e.clientX-holdXY[0],e.clientY-holdXY[1])>12)cancelHold();},true);
+['pointerup','pointercancel'].forEach(t=>document.addEventListener(t,cancelHold,true));
+document.addEventListener('touchstart',e=>{if(e.touches.length>1)cancelHold();},{capture:true,passive:true});
+document.addEventListener('click',e=>{if(eatClick){e.stopPropagation();e.preventDefault();}},true);
 /* measure safe area top in px */
 (function(){const p=document.createElement('div');p.style.cssText='position:fixed;top:0;height:env(safe-area-inset-top,0px);visibility:hidden';document.body.appendChild(p);
   document.documentElement.style.setProperty('--satpx',p.getBoundingClientRect().height);p.remove();})();
@@ -546,7 +556,7 @@ function makePlaceholders(n){const P=[['#87b5e6','#e9d7b8','#6c8c5a'],['#f6a25a'
 
 /* ---------- settings ---------- */
 function openSettings(){fillSettings();show('settings');anim($('#settings'),[{transform:'translateY(100%)'},{transform:'translateY(0)'}],320);}
-function fillSettings(){$('#sVer').textContent='Versão 7 · tela '+screen.height+' · área '+innerHeight+(isStandalone?' · app':' · navegador');$('#sLen').value=String(cfg.len);$('#sHint').value=String(cfg.hint);$('#sBg').value=cfg.bg;$('#sWhen').value=cfg.when;
+function fillSettings(){$('#sVer').textContent='Versão 9 · tela '+screen.height+' · área '+innerHeight+(isStandalone?' · app':' · navegador');$('#sLen').value=String(cfg.len);$('#sHint').value=String(cfg.hint);$('#sBg').value=cfg.bg;$('#sWhen').value=cfg.when;
   $$('.sSuit').forEach(s=>{s.innerHTML=Object.keys(SUITS).map(k=>'<option value="'+k+'">'+SUITS[k].n+'</option>').join('');s.value=cfg.suits[+s.dataset.i];});
   $('#galCount').textContent=gallery.length?gallery.length+' fotos':'nenhuma';
   const i=cfg.suits.indexOf('H');$('#sEx').textContent=(i+1)+'13'+(cfg.len===6?'580':'7')+' = Rei de Copas';
