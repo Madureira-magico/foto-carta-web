@@ -222,13 +222,14 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
       <span class="sec-t">Código</span>
       <div class="box">
         <div class="row">Tamanho do código<select id="sLen"><option value="4">4 dígitos</option><option value="6">6 dígitos</option></select></div>
+        <div class="row">Copiar a carta<select id="sCopy"><option value="plain">Quatro de Copas</option><option value="art">o Quatro de Copas</option><option value="off">Não copiar</option></select></div>
         <div class="row">Carta discreta<select id="sHint"><option value=".35">Visível</option><option value=".25">Discreta</option><option value=".14">Bem fraca</option><option value="0">Desligada</option></select></div>
         <div class="row">Dígito 1<select class="sSuit" data-i="0"></select></div>
         <div class="row">Dígito 2<select class="sSuit" data-i="1"></select></div>
         <div class="row">Dígito 3<select class="sSuit" data-i="2"></select></div>
         <div class="row">Dígito 4<select class="sSuit" data-i="3"></select></div>
       </div>
-      <div class="note">1º dígito = naipe. 2º e 3º = valor de 01 a 13 (01 Ás, 11 Valete, 12 Dama, 13 Rei). Os dígitos que sobram podem ser quaisquer números. Ex.: <b id="sEx"></b>. Enquanto você digita, a carta aparece bem fraquinha embaixo do teclado (ex.: 4 ♥) para conferir e apagar se precisar, antes do último dígito. Código inválido faz a tela tremer como senha errada, e você digita de novo.</div>
+      <div class="note">1º dígito = naipe. 2º e 3º = valor de 01 a 13 (01 Ás, 11 Valete, 12 Dama, 13 Rei). Os dígitos que sobram podem ser quaisquer números. Ex.: <b id="sEx"></b>. Enquanto você digita, a carta aparece bem fraquinha embaixo do teclado (ex.: 4 ♥) para conferir e apagar se precisar, antes do último dígito. Ao digitar o último dígito, o nome da carta (ex.: Quatro de Copas) é copiado em segredo para a área de transferência, para o atalho da Siri. Código inválido faz a tela tremer como senha errada, e você digita de novo.</div>
     </div>
 
     <div class="sec">
@@ -308,7 +309,7 @@ const store={
 };
 const SUITS={C:{n:'Paus',red:false},H:{n:'Copas',red:true},S:{n:'Espadas',red:false},D:{n:'Ouros',red:true}};
 const RANKS={1:'Ás',11:'Valete',12:'Dama',13:'Rei'};
-let cfg=Object.assign({suits:['S','H','C','D'],len:4,hint:'.25',bg:'felt',when:'now',fpos:null},store.get('cfg',{}));
+let cfg=Object.assign({copy:'plain',suits:['S','H','C','D'],len:4,hint:'.25',bg:'felt',when:'now',fpos:null},store.get('cfg',{}));
 let wall=store.get('wall',null), homeShot=store.get('homeShot',null), gallery=store.get('gallery',[]);
 function saveCfg(){store.set('cfg',cfg);}
 
@@ -361,7 +362,7 @@ const pad=$('#pad');
 [1,2,3,4,5,6,7,8,9,0].forEach(n=>{const k=document.createElement('div');k.className='key'+(n===0?' zero':'');
   k.innerHTML='<b>'+n+'</b><i>'+(n>0?LET[n-1]:'')+'</i>';
   k.addEventListener('pointerdown',e=>{e.preventDefault();k.classList.add('p');press(String(n));});
-  const up=()=>k.classList.remove('p');k.addEventListener('pointerup',up);k.addEventListener('pointerleave',up);k.addEventListener('pointercancel',up);
+  const up=()=>k.classList.remove('p');k.addEventListener('pointerup',e=>{up();doCopy();});k.addEventListener('touchend',()=>doCopy());k.addEventListener('pointerleave',up);k.addEventListener('pointercancel',up);
   pad.appendChild(k);});
 function drawDots(){const d=$('#dots');d.innerHTML='';for(let i=0;i<cfg.len;i++){const s=document.createElement('div');s.className='dot'+(i<code.length?' f':'');d.appendChild(s);}
   $('#cancel').textContent=code.length?'Apagar':'Cancelar';drawHint();}
@@ -373,7 +374,17 @@ function drawHint(){const h=$('#hint');h.style.color='rgba(255,255,255,'+cfg.hin
     t=(v?v+' ':'')+su;}
   h.textContent=t;}
 let busy=false;
-function press(n){if(busy||code.length>=cfg.len)return;code+=n;drawDots();if(code.length===cfg.len){busy=true;setTimeout(check,140);}}
+function press(n){if(busy||code.length>=cfg.len)return;code+=n;drawDots();if(code.length===cfg.len){pendingCopy=cardText(code);busy=true;setTimeout(check,140);}}
+/* ---------- área de transferência (oculto) ---------- */
+const NOMES={1:'Ás',2:'Dois',3:'Três',4:'Quatro',5:'Cinco',6:'Seis',7:'Sete',8:'Oito',9:'Nove',10:'Dez',11:'Valete',12:'Dama',13:'Rei'};
+let pendingCopy=null;
+function cardText(c){const s=+c[0],v=+c.slice(1,3);if(!(s>=1&&s<=4&&v>=1&&v<=13)||cfg.copy==='off')return null;
+  const t=NOMES[v]+' de '+SUITS[cfg.suits[s-1]].n;if(cfg.copy==='art')return(v===12?'a ':'o ')+t;return t;}
+function doCopy(){const t=pendingCopy;if(!t)return;pendingCopy=null;
+  const fallback=()=>{try{const ta=document.createElement('textarea');ta.value=t;ta.setAttribute('readonly','');
+      ta.style.cssText='position:fixed;top:0;left:0;opacity:0;width:1px;height:1px;font-size:16px;pointer-events:none';
+      document.body.appendChild(ta);ta.select();ta.setSelectionRange(0,t.length);document.execCommand('copy');ta.remove();}catch(_){}};
+  try{if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(fallback);}else fallback();}catch(_){fallback();}}
 $('#cancel').addEventListener('click',()=>{if(busy)return;if(code.length){code=code.slice(0,-1);drawDots();}else{show('lock');anim(lc,[{transform:'translateY(-120px)',opacity:0},{transform:'translateY(0)',opacity:1}],280);hide('pass');}});
 function check(){const s=+code[0],v=+code.slice(1,3);
   if(s>=1&&s<=4&&v>=1&&v<=13){success(cfg.suits[s-1],v);}
@@ -556,12 +567,13 @@ function makePlaceholders(n){const P=[['#87b5e6','#e9d7b8','#6c8c5a'],['#f6a25a'
 
 /* ---------- settings ---------- */
 function openSettings(){fillSettings();show('settings');anim($('#settings'),[{transform:'translateY(100%)'},{transform:'translateY(0)'}],320);}
-function fillSettings(){$('#sVer').textContent='Versão 9 · tela '+screen.height+' · área '+innerHeight+(isStandalone?' · app':' · navegador');$('#sLen').value=String(cfg.len);$('#sHint').value=String(cfg.hint);$('#sBg').value=cfg.bg;$('#sWhen').value=cfg.when;
+function fillSettings(){$('#sVer').textContent='Versão 10 · tela '+screen.height+' · área '+innerHeight+(isStandalone?' · app':' · navegador');$('#sLen').value=String(cfg.len);$('#sHint').value=String(cfg.hint);$('#sCopy').value=cfg.copy;$('#sBg').value=cfg.bg;$('#sWhen').value=cfg.when;
   $$('.sSuit').forEach(s=>{s.innerHTML=Object.keys(SUITS).map(k=>'<option value="'+k+'">'+SUITS[k].n+'</option>').join('');s.value=cfg.suits[+s.dataset.i];});
   $('#galCount').textContent=gallery.length?gallery.length+' fotos':'nenhuma';
   const i=cfg.suits.indexOf('H');$('#sEx').textContent=(i+1)+'13'+(cfg.len===6?'580':'7')+' = Rei de Copas';
   $('#bCalib').style.opacity=homeShot?1:.4;}
 $('#sLen').onchange=e=>{cfg.len=+e.target.value;saveCfg();fillSettings();};
+$('#sCopy').onchange=e=>{cfg.copy=e.target.value;saveCfg();};
 $('#sHint').onchange=e=>{cfg.hint=e.target.value;saveCfg();};
 $('#sBg').onchange=e=>{cfg.bg=e.target.value;saveCfg();};
 $('#sWhen').onchange=e=>{cfg.when=e.target.value;saveCfg();};
